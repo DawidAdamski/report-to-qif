@@ -16,8 +16,7 @@ def detect_encoding(file_path):
     
     return detector.result['encoding']
 
-def find_header_start(file_path, encoding):
-    target_header = "#Data księgowania;#Data operacji;#Opis operacji;#Tytuł;#Nadawca/Odbiorca;#Numer konta;#Kwota;#Saldo po operacji;"
+def find_header_start(target_header, file_path, encoding):
     header_line = None
     line_count = 0
 
@@ -48,8 +47,8 @@ def csv_to_qif(input_file, output_file, bank):
     # Check if the bank is implemented
     if bank == 'mbank':
         print(f"Processing for: {bank}")
-        
-        header_start_line = find_header_start(input_file, encoding)
+        target_header = "#Data księgowania;#Data operacji;#Opis operacji;#Tytuł;#Nadawca/Odbiorca;#Numer konta;#Kwota;#Saldo po operacji;"
+        header_start_line = find_header_start(target_header, input_file, encoding)
         print(f"Data starts at line: {header_start_line}")
 
         # Read the CSV using pandas with the detected encoding
@@ -78,8 +77,8 @@ def csv_to_qif(input_file, output_file, bank):
                     # Remove leading/trailing spaces and collapse multiple spaces
                     data[col] = data[col].str.replace(r'\s+', ' ', regex=True).str.strip()
 
-            print(f"Data after cleaning:")
-            print(data.head())  # Display the first few rows of the cleaned data
+            #print(f"Data after cleaning:")
+            #print(data.head())  # Display the first few rows of the cleaned data
 
 
         except Exception as e:
@@ -104,6 +103,60 @@ def csv_to_qif(input_file, output_file, bank):
                 qif_file.write("^\n")  # '^' is the end-of-entry marker in QIF
 
         print(f"QIF file written to: {output_file}")
+    elif bank == "mbank-credit":
+        print(f"Processing for: {bank}")
+        target_header = "#Data księgowania;#Data operacji;#Opis operacji;#Tytuł;#Nadawca/Odbiorca;#Numer konta;#Numer karty;#Kwota;"
+        header_start_line = find_header_start(target_header, input_file, encoding)
+        print(f"Data starts at line: {header_start_line}")
+
+        try:
+          data = pd.read_csv(input_file, encoding="cp1250", sep=";", engine='python', index_col=False, skiprows=header_start_line-1)  
+          print(f"Successfully read the CSV file with {len(data)} rows.")
+
+          # Remove empty rows
+          data.dropna(how='all', inplace=True)
+
+          # Remove rows containing legal information
+          data = data[~data.apply(lambda row: row.astype(str).str.contains('Niniejszy dokument').any(), axis=1)]
+
+          # Drop the last unnamed column if it exists
+          data = data.iloc[: , :-1]
+
+          # Clean all spaces from specific columns
+          for col in ['#Saldo po operacji', '#Kwota']:
+              if col in data.columns:
+                  data[col] = data[col].str.replace(" ", "").str.replace("\u00A0", "")
+            
+          # Clean redundant spaces from specific columns
+          for col in ['#Tytuł', '#Nadawca/Odbiorca', '#Opis operacji']:
+              if col in data.columns:
+                  # Remove leading/trailing spaces and collapse multiple spaces
+                  data[col] = data[col].str.replace(r'\s+', ' ', regex=True).str.strip()
+
+          print(f"Data after cleaning:")
+          print(data.head())  # Display the first few rows of the cleaned data
+
+        except:
+            print(f"Error reading the CSV file: {e}")
+            sys.exit(1)
+                # Write the QIF output
+        
+        with open(output_file, 'w', encoding='utf-8') as qif_file:
+            qif_file.write('!Type:CCard\n')
+
+            # Iterate through each row and write to QIF format
+            for index, row in data.iterrows():
+                date = row['#Data operacji']
+                amount = row['#Kwota']
+                payee = row['#Nadawca/Odbiorca']
+                memo = f"{row['#Opis operacji']} | {row['#Tytuł']}"
+                
+                qif_file.write(f"D{date}\n")
+                qif_file.write(f"T{amount}\n")
+                qif_file.write(f"P{payee}\n")
+                qif_file.write(f"M{memo}\n")
+                qif_file.write("^\n")  # '^' is the end-of-entry marker in QIF
+
     else:
         print(f"Bank '{bank}' is not yet implemented.")
         sys.exit(1)  # Exit the script if the bank is not implemented
@@ -119,11 +172,10 @@ def main():
     
     # Group 2: Bank-related arguments (specific to banks)
     bank_group = parser.add_argument_group('Bank Options', 'Arguments related to bank configuration')
-    bank_group.add_argument('-b', '--bank', choices=['mbank', 'mbank-credit','alior', 'santander'], required=True, 
+    bank_group.add_argument('-b', '--bank', choices=['mbank', 'mbank-credit'], required=True, 
                             help="Specify the bank identifier.\n"
-                                 "'mbank' is implemented.\n"
-                                 "'mbank-credit' is implemented.\n"
-                                 "'alior' and 'santander' are not yet implemented.")
+                                 "'mbank' is for reports from standard ROR accounts.\n"
+                                 "'mbank-credit' is for credit cards reports.\n")
     
     # Parse arguments
     args = parser.parse_args()
