@@ -58,11 +58,11 @@ def csv_to_qif(input_file, output_file, bank):
             
             # Remove empty rows
             data.dropna(how='all', inplace=True)
-
+            
             # Remove rows containing 'Saldo końcowe' or legal information
             data = data[~data.apply(lambda row: row.astype(str).str.contains('Saldo końcowe').any(), axis=1)]
             data = data[~data.apply(lambda row: row.astype(str).str.contains('Niniejszy dokument').any(), axis=1)]
-
+            
             # Drop the last unnamed column if it exists
             data = data.iloc[: , :-1]
 
@@ -70,12 +70,12 @@ def csv_to_qif(input_file, output_file, bank):
             for col in ['#Saldo po operacji', '#Kwota']:
                 if col in data.columns:
                     data[col] = data[col].str.replace(" ", "").str.replace("\u00A0", "")
-
+            
             # Clean redundant spaces from specific columns
             for col in ['#Tytuł', '#Nadawca/Odbiorca', '#Opis operacji']:
                 if col in data.columns:
                     # Remove leading/trailing spaces and collapse multiple spaces
-                    data[col] = data[col].str.replace(r'\s+', ' ', regex=True).str.strip()
+                    data[col] = data[col].fillna('').str.replace(r'\s+', ' ', regex=True).str.strip()
 
             #print(f"Data after cleaning:")
             #print(data.head())  # Display the first few rows of the cleaned data
@@ -112,16 +112,16 @@ def csv_to_qif(input_file, output_file, bank):
         try:
           data = pd.read_csv(input_file, encoding="cp1250", sep=";", engine='python', index_col=False, skiprows=header_start_line-1)  
           print(f"Successfully read the CSV file with {len(data)} rows.")
-
+          
           # Remove empty rows
           data.dropna(how='all', inplace=True)
-
+          
           # Remove rows containing legal information
           data = data[~data.apply(lambda row: row.astype(str).str.contains('Niniejszy dokument').any(), axis=1)]
 
           # Drop the last unnamed column if it exists
           data = data.iloc[: , :-1]
-
+          
           # Clean all spaces from specific columns
           for col in ['#Saldo po operacji', '#Kwota']:
               if col in data.columns:
@@ -131,10 +131,10 @@ def csv_to_qif(input_file, output_file, bank):
           for col in ['#Tytuł', '#Nadawca/Odbiorca', '#Opis operacji']:
               if col in data.columns:
                   # Remove leading/trailing spaces and collapse multiple spaces
-                  data[col] = data[col].str.replace(r'\s+', ' ', regex=True).str.strip()
+                  data[col] = data[col].fillna('').str.replace(r'\s+', ' ', regex=True).str.strip()
 
-          print(f"Data after cleaning:")
-          print(data.head())  # Display the first few rows of the cleaned data
+          #print(f"Data after cleaning:")
+          #print(data.head())  # Display the first few rows of the cleaned data
 
         except:
             print(f"Error reading the CSV file: {e}")
