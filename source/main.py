@@ -3,6 +3,7 @@ import os
 import sys
 import chardet
 import pandas as pd
+import re
 
 def detect_encoding(file_path):
     detector = chardet.UniversalDetector()
@@ -34,6 +35,14 @@ def find_header_start(target_header, file_path, encoding):
     
     return header_line
 
+def handle_bad_lines(line):
+    """
+    Fix lines with problematic quotes dynamically.
+    """
+    # Remove mismatched quotes within fields
+    line = re.sub(r'(?<=;)"([^"]*?)"([^"]*?)"', r'"\1\2"', line)
+    return line
+
 def csv_to_qif(input_file, output_file, bank):
 
     # Detect file encoding
@@ -44,6 +53,10 @@ def csv_to_qif(input_file, output_file, bank):
         print("Could not detect encoding.")
         sys.exit(1)
 
+    def bad_line_handler(line):
+        fixed_line = handle_bad_lines(line)
+        return fixed_line
+
     # Check if the bank is implemented
     if bank == 'mbank':
         print(f"Processing for: {bank}")
@@ -53,7 +66,7 @@ def csv_to_qif(input_file, output_file, bank):
 
         # Read the CSV using pandas with the detected encoding
         try:
-            data = pd.read_csv(input_file, encoding="cp1250", sep=";", engine='python', index_col=False, skiprows=header_start_line-1)
+            data = pd.read_csv(input_file, encoding="cp1250", sep=";", engine='python', index_col=False, skiprows=header_start_line-1, quotechar='"', on_bad_lines=bad_line_handler)
             print(f"Successfully read the CSV file with {len(data)} rows.")
             
             # Remove empty rows
@@ -82,7 +95,10 @@ def csv_to_qif(input_file, output_file, bank):
 
 
         except Exception as e:
-            print(f"Error reading the CSV file: {e}")
+            print(f"Error reading the CSV file at row {header_start_line}: {e}")
+            with open(input_file, 'r', encoding="cp1250") as f:
+                lines = f.readlines()
+                print(f"Offending line: {lines[header_start_line-1]}")
             sys.exit(1)
 
         # Write the QIF output
